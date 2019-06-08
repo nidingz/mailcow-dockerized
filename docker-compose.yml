@@ -110,7 +110,6 @@ services:
         - mysql-socket-vol-1:/var/run/mysqld/
         - ./data/conf/sogo/:/etc/sogo/
         - ./data/conf/rspamd/meta_exporter:/meta_exporter:ro
-        - ./data/conf/phpfpm/sogo-sso/:/etc/sogo-sso/
         - ./data/conf/phpfpm/php-fpm.d/pools.conf:/usr/local/etc/php-fpm.d/z-pools.conf
         - ./data/conf/phpfpm/php-conf.d/opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini
         - ./data/conf/phpfpm/php-conf.d/upload.ini:/usr/local/etc/php/conf.d/upload.ini
@@ -134,7 +133,7 @@ services:
         - API_KEY=${API_KEY:-invalid}
         - API_ALLOW_FROM=${API_ALLOW_FROM:-invalid}
         - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-mailcow-dockerized}
-        - SKIP_SOLR=${SKIP_SOLR:-y}
+        - SKIP_SOLR=${SKIP_SOLR:-n}
         - ALLOW_ADMIN_EMAIL_LOGIN=${ALLOW_ADMIN_EMAIL_LOGIN:-n}
       restart: always
       dns:
@@ -144,34 +143,6 @@ services:
           aliases:
             - phpfpm
 
-    sogo-mailcow:
-      image: mailcow/sogo:1.54
-      build: ./data/Dockerfiles/sogo
-      environment:
-        - DBNAME=${DBNAME}
-        - DBUSER=${DBUSER}
-        - DBPASS=${DBPASS}
-        - TZ=${TZ}
-        - LOG_LINES=${LOG_LINES:-9999}
-        - MAILCOW_HOSTNAME=${MAILCOW_HOSTNAME}
-        - ACL_ANYONE=${ACL_ANYONE:-disallow}
-        - ALLOW_ADMIN_EMAIL_LOGIN=${ALLOW_ADMIN_EMAIL_LOGIN:-n}
-        - IPV4_NETWORK=${IPV4_NETWORK:-172.22.1}
-      volumes:
-        - ./data/conf/sogo/:/etc/sogo/
-        - ./data/web/inc/init_db.inc.php:/init_db.inc.php
-        - ./data/conf/sogo/custom-sogo.js:/usr/lib/GNUstep/SOGo/WebServerResources/js/custom-sogo.js
-        - mysql-socket-vol-1:/var/run/mysqld/
-        - sogo-web-vol-1:/sogo_web
-      restart: always
-      dns:
-        - ${IPV4_NETWORK:-172.22.1}.254
-      networks:
-        mailcow-network:
-          ipv4_address: ${IPV4_NETWORK:-172.22.1}.248
-          aliases:
-            - sogo
-
     dovecot-mailcow:
       image: mailcow/dovecot:1.78
       build: ./data/Dockerfiles/dovecot
@@ -180,8 +151,6 @@ services:
       volumes:
         - ./data/conf/dovecot:/usr/local/etc/dovecot
         - ./data/assets/ssl:/etc/ssl/mail/:ro
-        - ./data/conf/sogo/:/etc/sogo/
-        - ./data/conf/phpfpm/sogo-sso/:/etc/phpfpm/
         - vmail-vol-1:/var/vmail
         - vmail-attachments-vol-1:/var/attachments
         - crypt-vol-1:/mail_crypt/
@@ -199,7 +168,7 @@ services:
         - ALLOW_ADMIN_EMAIL_LOGIN=${ALLOW_ADMIN_EMAIL_LOGIN:-n}
         - MAILDIR_GC_TIME=${MAILDIR_GC_TIME:-1440}
         - ACL_ANYONE=${ACL_ANYONE:-disallow}
-        - SKIP_SOLR=${SKIP_SOLR:-y}
+        - SKIP_SOLR=${SKIP_SOLR:-n}
         - MAILDIR_SUB=${MAILDIR_SUB:-}
       ports:
         - "${DOVEADM_PORT:-127.0.0.1:19991}:12345"
@@ -274,12 +243,8 @@ services:
       command: /bin/sh -c "envsubst < /etc/nginx/conf.d/templates/listen_plain.template > /etc/nginx/conf.d/listen_plain.active &&
         envsubst < /etc/nginx/conf.d/templates/listen_ssl.template > /etc/nginx/conf.d/listen_ssl.active &&
         envsubst < /etc/nginx/conf.d/templates/server_name.template > /etc/nginx/conf.d/server_name.active &&
-        envsubst < /etc/nginx/conf.d/templates/sogo.template > /etc/nginx/conf.d/sogo.active &&
-        envsubst < /etc/nginx/conf.d/templates/sogo_eas.template > /etc/nginx/conf.d/sogo_eas.active &&
-        . /etc/nginx/conf.d/templates/sogo.auth_request.template.sh > /etc/nginx/conf.d/sogo_proxy_auth.active &&
         nginx -qt &&
         until ping phpfpm -c1 > /dev/null; do sleep 1; done &&
-        until ping sogo -c1 > /dev/null; do sleep 1; done &&
         until ping redis -c1 > /dev/null; do sleep 1; done &&
         until ping rspamd -c1 > /dev/null; do sleep 1; done &&
         exec nginx -g 'daemon off;'"
@@ -296,7 +261,6 @@ services:
         - ./data/assets/ssl/:/etc/ssl/mail/:ro
         - ./data/conf/nginx/:/etc/nginx/conf.d/:rw
         - ./data/conf/rspamd/meta_exporter:/meta_exporter:ro
-        - sogo-web-vol-1:/usr/lib/GNUstep/SOGo/
       ports:
         - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PORT:-443}:${HTTPS_PORT:-443}"
         - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:${HTTP_PORT:-80}"
@@ -346,7 +310,6 @@ services:
       depends_on:
         - dovecot-mailcow
         - postfix-mailcow
-        - sogo-mailcow
         - php-fpm-mailcow
         - redis-mailcow
       restart: always
@@ -436,7 +399,6 @@ services:
         - clamd-mailcow
         - rspamd-mailcow
         - php-fpm-mailcow
-        - sogo-mailcow
         - dovecot-mailcow
         - postfix-mailcow
         - memcached-mailcow
@@ -478,4 +440,3 @@ volumes:
   solr-vol-1:
   postfix-vol-1:
   crypt-vol-1:
-  sogo-web-vol-1:
